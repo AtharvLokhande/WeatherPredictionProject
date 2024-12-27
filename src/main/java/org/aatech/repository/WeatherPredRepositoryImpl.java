@@ -1,71 +1,92 @@
 package org.aatech.repository;
 
 import java.sql.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class WeatherPredRepositoryImpl extends DBSTATE implements WeatherPredRepository {
 
     @Override
     public String WetherPrediction(int cityId) {
-        String prediction = "";
-        
-        try {
-            // Query to fetch the last 30 rows from the weather table
-            String query = "SELECT * FROM weather ORDER BY date DESC LIMIT 30";
-            stmt = conn.prepareStatement(query);
-            rs = stmt.executeQuery();
-            
-            // Initialize variables to calculate averages or detect patterns
-            int totalTempMax = 0;
-            int totalTempMin = 0;
-            int totalPrecipitation = 0;
-            int count = 0;
-            Map<String, Integer> weatherCount = new HashMap<>();
-            
-            // Process the last 30 rows of weather data
-            while (rs.next()) {
-                totalTempMax += rs.getDouble("temp_max");
-                totalTempMin += rs.getDouble("temp_min");
-                totalPrecipitation += rs.getDouble("precipitation");
-                String weather = rs.getString("weather");
-                
-                // Count occurrences of different weather types
-                weatherCount.put(weather, weatherCount.getOrDefault(weather, 0) + 1);
-                count++;
+        List<Double> precipitation = new ArrayList<>();
+        List<Double> tempMax = new ArrayList<>();
+        List<Double> tempMin = new ArrayList<>();
+        List<Double> windFlow = new ArrayList<>();
+        List<String> weatherType = new ArrayList<>(); // Categorical target
+
+        try  {
+        	stmt = conn.prepareStatement("SELECT w.precipitation, w.temp_max, w.temp_min, w.wind, w.weather FROM cityweatherjoin cw JOIN weather w ON cw.weatherid = w.id WHERE cw.cityid = ? ORDER\n"
+        			+ " BY w.date desc LIMIT 30 ");
+            stmt.setInt(1, cityId);
+            ResultSet resultSet = stmt.executeQuery();
+
+            while (resultSet.next()) {
+                precipitation.add(resultSet.getDouble("precipitation"));
+                tempMax.add(resultSet.getDouble("temp_max"));
+                tempMin.add(resultSet.getDouble("temp_min"));
+                windFlow.add(resultSet.getDouble("wind"));
+                weatherType.add(resultSet.getString("weather"));
             }
-            
-            // Calculate average temperatures and precipitation
-            double avgTempMax = totalTempMax / count;
-            double avgTempMin = totalTempMin / count;
-            double avgPrecipitation = totalPrecipitation / count;
-            
-            // Determine the most frequent weather type in the last 30 days
-            String predictedWeather = getMostFrequentWeather(weatherCount);
-            
-            // Simple prediction logic based on average temperatures and weather type
-            if (predictedWeather.equals("sun") && avgTempMax > 20) {
-                prediction = "Tomorrow will be sunny with a high of " + avgTempMax + "°C and a low of " + avgTempMin + "°C.";
-            } else if (predictedWeather.equals("rain") && avgPrecipitation > 2) {
-                prediction = "Expect rain tomorrow with a high of " + avgTempMax + "°C and a low of " + avgTempMin + "°C.";
-            } else if (predictedWeather.equals("fog")) {
-                prediction = "Tomorrow will be foggy with a high of " + avgTempMax + "°C and a low of " + avgTempMin + "°C.";
-            } else {
-                prediction = "The weather tomorrow is uncertain, but it will likely be " + predictedWeather + " with a high of " + avgTempMax + "°C and a low of " + avgTempMin + "°C.";
-            }
-            
         } catch (SQLException e) {
             e.printStackTrace();
-            prediction = "Error retrieving weather data.";
+            return "Error fetching weather data.";
         }
-        
-        return prediction;
+
+        // Ensure we have enough data
+        if (weatherType.size() < 2) {
+            return "Not enough data for prediction.";
+        }
+
+        // Predict weather type for tomorrow
+        String predictedWeather = predictWeatherType(precipitation, tempMax, tempMin, windFlow, weatherType);
+
+        return "Predicted weather type for tomorrow is " + predictedWeather;
     }
 
-    // Helper method to determine the most frequent weather type
-    private String getMostFrequentWeather(Map<String, Integer> weatherCount) {
-        return weatherCount.entrySet().stream()
+    private String predictWeatherType(List<Double> precipitation, List<Double> tempMax, 
+                                      List<Double> tempMin, List<Double> windFlow, 
+                                      List<String> weatherType) {
+        int n = weatherType.size();
+
+        // Example: Use the last day's features to predict tomorrow
+        double nextPrecipitation = precipitation.get(n - 1);
+        double nextTempMax = tempMax.get(n - 1);
+        double nextTempMin = tempMin.get(n - 1);
+        double nextWindFlow = windFlow.get(n - 1);
+
+        // Build a simple rule-based classifier (example)
+        Map<String, Double> probabilities = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            String type = weatherType.get(i);
+            double similarityScore = 0;
+
+            // Calculate similarity score based on feature closeness
+         // Calculate similarity for precipitation
+            double precipitationDifference = Math.abs(precipitation.get(i) - nextPrecipitation);
+            similarityScore += 1.0 / (1 + precipitationDifference);
+
+            // Calculate similarity for max temperature
+            double tempMaxDifference = Math.abs(tempMax.get(i) - nextTempMax);
+            similarityScore += 1.0 / (1 + tempMaxDifference);
+
+            // Calculate similarity for min temperature
+            double tempMinDifference = Math.abs(tempMin.get(i) - nextTempMin);
+            similarityScore += 1.0 / (1 + tempMinDifference);
+
+            // Calculate similarity for wind flow
+            double windFlowDifference = Math.abs(windFlow.get(i) - nextWindFlow);
+            similarityScore += 1.0 / (1 + windFlowDifference);
+
+
+            probabilities.put(type, probabilities.getOrDefault(type, 0.0) + similarityScore);
+        }
+
+        // Find the weather type with the highest probability
+        return probabilities.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
-                .orElse("sun"); // Default to "sun" if no data is found
+                .orElse("Unknown");
     }
 }
