@@ -34,6 +34,7 @@ public class WeahterPredClientApp {
 			System.out.println("3: Add New City");
 			System.out.println("4: Add Past weather Data in city");
 			System.out.println("5: Predict the tomorrow weather using liner regression");
+			System.out.println("6: Predict the Specific future day weather");
 
 			int choice = xyz.nextInt();
 			logger.debug("User selected menu option: {}", choice);
@@ -239,6 +240,60 @@ public class WeahterPredClientApp {
 					System.out.println("There is no data table is present");
 				}
 				break;
+			case 6:
+				logger.debug("Case 6 selected: Predicting Specific day weather using linear regression");
+                o = stateService.getAllStates();
+				if (o.isPresent()) {
+					List<StateModel> states = o.get();
+					states.forEach((state) -> System.out.println((++count) + "\t" + state.getStateName()));
+					System.out.println("Enter state name ");
+					xyz.nextLine();
+					stateName = xyz.nextLine();
+					System.out.println("Distric Name");
+					System.out.println("========================================");
+					List<DistModel> list = stateService.getDistListByName(stateName);
+					if (list != null) {
+						list.forEach((dist) -> System.out.println(dist.getId() + "\t" + dist.getName()));
+						System.out.println("========================================");
+						states.clear();
+						list.clear();
+						System.out.println("Enter District Name");
+						distName = xyz.nextLine();
+						int stateId = stateService.getStateIdByName(stateName);
+						int distId = stateService.getDistIdByName(distName);
+						//System.out.println(stateId + " " + distId);
+						System.out.println("Enter the city name");
+						String cityName = xyz.nextLine();
+						int cityId = cityService.getCityIdByName(cityName, stateId, distId);
+						System.out.println("Enter the Date in fomate of {YYYY-MM-DD} ");
+						String dateInput = xyz.nextLine();
+						 
+						String Prediction = weatherPredService.WetherPredictionBydate(cityId,dateInput);
+						
+						System.out.println(Prediction);
+					
+						
+					} else {
+						System.out.println("Do you want to add " + stateName + " in database");
+						String msg = xyz.nextLine();
+						if (msg.equals("yes")) {
+							b = stateService.isAddNewState(new StateModel(0, stateName));
+							if (b) {
+								logger.info("New State Added successfully...");
+								System.out.println("New State Added successfully...");
+							}
+						} else {
+							logger.warn("State Not added");
+							System.out.println("state Not Added");
+						}
+					}
+
+				} else {
+					logger.info("There is No data ");
+					System.out.println("There is no data table is present");
+				}
+				break;
+
 				
 			default:
 				logger.info("Invalid choice");

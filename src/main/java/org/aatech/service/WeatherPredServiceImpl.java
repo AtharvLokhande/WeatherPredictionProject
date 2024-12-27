@@ -13,4 +13,10 @@ public class WeatherPredServiceImpl implements WeatherPredService {
 		
 	}
 
+	@Override
+	public String WetherPredictionBydate(int cityId, String dateInput) {
+		// TODO Auto-generated method stub
+		return stmtRepo.WetherPredictionBydate(cityId, dateInput);
+	}
+
 }
